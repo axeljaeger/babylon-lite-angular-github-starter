@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # NPM dependencies
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "03:00"
+    groups:
+      angular:
+        patterns:
+          - "@angular/*"
+          - "@angular-devkit/build-angular"
+      babylonjs:
+        patterns:
+          - "@babylonjs/*"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "03:00"
