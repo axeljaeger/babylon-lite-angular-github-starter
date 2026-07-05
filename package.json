@@ -1,5 +1,5 @@
 {
-  "name": "babylonjs-angular-github-starter",
+  "name": "babylon-lite-angular-github-starter",
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
@@ -29,7 +29,7 @@
     "@angular/forms": "22.0.5",
     "@angular/platform-browser": "22.0.5",
     "@angular/router": "22.0.5",
-    "@babylonjs/core": "9.13.0",
+    "@babylonjs/lite": "1.7.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

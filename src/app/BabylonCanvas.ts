@@ -1,67 +1,158 @@
-import { Directive, effect, ElementRef, inject, model, type OnDestroy, type OnInit } from '@angular/core';
-
-import { Scene } from '@babylonjs/core/scene';
-import { Engine } from '@babylonjs/core/Engines/engine';
-import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
-import { Vector3 } from '@babylonjs/core/Maths/math.vector';
-import { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';
-import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder';
-import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder';
-
-import '@babylonjs/core/Materials/standardMaterial';
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
-import { Color3 } from '@babylonjs/core/Maths/math.color';
+import { Directive, ElementRef, effect, inject, model, signal, type OnDestroy, type OnInit } from '@angular/core';
+import {
+  addToScene,
+  attachControl,
+  createArcRotateCamera,
+  createEngine,
+  createGround,
+  createHemisphericLight,
+  createSceneContext,
+  createSphere,
+  createStandardMaterial,
+  disposeEngine,
+  disposeScene,
+  onBeforeRender,
+  registerScene,
+  resizeEngine,
+  startEngine,
+  stopEngine,
+  type ArcRotateCamera,
+  type EngineContext,
+  type SceneContext,
+  type StandardMaterialProps,
+} from '@babylonjs/lite';
 import type { PresetColor } from './sidebar/sidebar';
 
-// import { Inspector } from '@babylonjs/inspector';
+const colorLookup: Record<PresetColor, [number, number, number]> = {
+  red: [1, 0, 0],
+  green: [0, 1, 0],
+  blue: [0, 0, 1],
+};
 
-const colorLookup: Record<PresetColor, Color3> = {
-  red: Color3.Red(),
-  green: Color3.Green(),
-  blue: Color3.Blue()
-}
+const initialCamera = {
+  alpha: -Math.PI / 2,
+  beta: Math.PI / 2.5,
+  radius: 10,
+  target: { x: 0, y: 1, z: 0 },
+} as const;
 
 @Directive({
-  selector: 'canvas[babylonCanvas]'
+  selector: 'canvas[babylonCanvas]',
 })
 export class BabylonCanvas implements OnInit, OnDestroy {
   private readonly hostRef = inject<ElementRef<HTMLCanvasElement>>(ElementRef);
 
   public readonly color = model.required<PresetColor>();
-  private readonly _applyColor = effect(() => this.sphereMaterial.diffuseColor = colorLookup[this.color()]);
+  public readonly fps = signal(0);
+  public readonly error = signal<string | null>(null);
 
-  public engine = new Engine(this.hostRef.nativeElement, true);
-  public scene = new Scene(this.engine);
-  public camera = new FreeCamera("camera1", new Vector3(0, 5, -10), this.scene);
+  public engine: EngineContext | null = null;
+  public scene: SceneContext | null = null;
+  public camera: ArcRotateCamera | null = null;
 
-  private sphere = CreateSphere("sphere", { diameter: 2, segments: 32 }, this.scene);
-  private sphereMaterial = new StandardMaterial("sphereMat", this.scene);
+  private sphereMaterial: StandardMaterialProps | null = null;
+  private detachCameraControls: (() => void) | null = null;
+  private destroyed = false;
+  private readonly resizeObserver = new ResizeObserver(() => {
+    if (this.engine) {
+      resizeEngine(this.engine);
+    }
+  });
+  private readonly applyColorEffect = effect(() => {
+    const material = this.sphereMaterial;
 
-  private resizeObserver = new ResizeObserver(() => { this.engine.resize(true); this.scene.render(); });
-  
-  ngOnInit() {
-    this.camera.setTarget(Vector3.Zero());
-    this.camera.attachControl(this.hostRef.nativeElement, true);
+    if (material) {
+      material.diffuseColor = colorLookup[this.color()];
+    }
+  });
 
-    const light = new HemisphericLight("light", new Vector3(0, 1, 0), this.scene);
-    light.intensity = 0.7;
+  async ngOnInit(): Promise<void> {
+    if (!('gpu' in navigator)) {
+      this.error.set('Babylon Lite benötigt einen Browser mit WebGPU-Unterstützung.');
+      return;
+    }
 
-    this.sphere.position.y = 1;
-    this.sphere.material = this.sphereMaterial;
+    const canvas = this.hostRef.nativeElement;
 
-    CreateGround("ground", { width: 6, height: 6 }, this.scene);
+    try {
+      const engine = await createEngine(canvas);
 
-    this.engine.runRenderLoop(() => this.scene.render());
-    this.resizeObserver.observe(this.hostRef.nativeElement);
-  };
+      if (this.destroyed) {
+        disposeEngine(engine);
+        return;
+      }
 
-  ngOnDestroy(): void {
-    this.engine?.stopRenderLoop();
-    this.engine?.dispose();
-    this.resizeObserver.unobserve(this.hostRef.nativeElement);
+      const scene = createSceneContext(engine);
+      const camera = createArcRotateCamera(
+        initialCamera.alpha,
+        initialCamera.beta,
+        initialCamera.radius,
+        initialCamera.target,
+      );
+      const light = createHemisphericLight([0, 1, 0]);
+      const sphere = createSphere(engine, { diameter: 2, segments: 32 });
+      const ground = createGround(engine, { width: 6, height: 6 });
+      const sphereMaterial = createStandardMaterial();
+
+      this.engine = engine;
+      this.scene = scene;
+      this.camera = camera;
+      this.sphereMaterial = sphereMaterial;
+
+      scene.camera = camera;
+      this.detachCameraControls = attachControl(camera, canvas, scene);
+
+      light.intensity = 0.7;
+      sphere.position.y = 1;
+      sphere.material = sphereMaterial;
+      sphereMaterial.diffuseColor = colorLookup[this.color()];
+
+      addToScene(scene, light);
+      addToScene(scene, sphere);
+      addToScene(scene, ground);
+
+      onBeforeRender(scene, (deltaMs) => {
+        if (deltaMs > 0) {
+          this.fps.set(1000 / deltaMs);
+        }
+      });
+
+      await registerScene(scene);
+
+      if (this.destroyed) {
+        disposeScene(scene);
+        disposeEngine(engine);
+        return;
+      }
+
+      this.resizeObserver.observe(canvas);
+      await startEngine(engine);
+      this.error.set(null);
+    } catch {
+      this.error.set('Babylon Lite konnte nicht initialisiert werden.');
+    }
   }
 
-  public resetCamera() {
-    this.camera.setTarget(Vector3.Zero());
+  ngOnDestroy(): void {
+    this.destroyed = true;
+    this.detachCameraControls?.();
+    this.resizeObserver.disconnect();
+
+    if (this.engine) {
+      stopEngine(this.engine);
+      disposeScene(this.scene!);
+      disposeEngine(this.engine);
+    }
+  }
+
+  public resetCamera(): void {
+    if (!this.camera) {
+      return;
+    }
+
+    this.camera.alpha = initialCamera.alpha;
+    this.camera.beta = initialCamera.beta;
+    this.camera.radius = initialCamera.radius;
+    this.camera.target = { ...initialCamera.target };
   }
 }
