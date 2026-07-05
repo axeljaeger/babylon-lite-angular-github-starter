@@ -14,6 +14,8 @@ describe('Sidebar', () => {
 
     fixture = TestBed.createComponent(Sidebar);
     component = fixture.componentInstance;
+    fixture.componentRef.setInput('color', 'red');
+    fixture.componentRef.setInput('fps', 0);
     await fixture.whenStable();
   });
 
