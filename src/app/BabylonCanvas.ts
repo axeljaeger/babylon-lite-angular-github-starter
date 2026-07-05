@@ -19,6 +19,7 @@ const initialCamera = {
   radius: 10,
   target: { x: 0, y: 1, z: 0 },
 } as const;
+const fpsUpdateIntervalMs = 500;
 
 function createResizeObserver(callback: ResizeObserverCallback): ResizeObserver | null {
   return typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(callback);
@@ -61,7 +62,9 @@ export class BabylonCanvas implements OnInit, OnDestroy {
   }
 
   private async initialize(): Promise<void> {
-    if (!('gpu' in navigator)) {
+    const hasWebGpu = 'gpu' in navigator && navigator.gpu != null;
+
+    if (!hasWebGpu) {
       this.error.set('Babylon Lite requires a browser with WebGPU support.');
       return;
     }
@@ -110,7 +113,7 @@ export class BabylonCanvas implements OnInit, OnDestroy {
       lite.onBeforeRender(scene, (deltaMs) => {
         const now = performance.now();
 
-        if (deltaMs > 0 && now - this.lastFpsAt >= 500) {
+        if (deltaMs > 0 && now - this.lastFpsAt >= fpsUpdateIntervalMs) {
           this.fps.set(1000 / deltaMs);
           this.lastFpsAt = now;
         }
