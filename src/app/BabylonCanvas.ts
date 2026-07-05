@@ -42,6 +42,7 @@ export class BabylonCanvas implements OnInit, OnDestroy {
   private sphereMaterial: StandardMaterialProps | null = null;
   private detachCameraControls: (() => void) | null = null;
   private destroyed = false;
+  private lastFpsAt = 0;
   private readonly resizeObserver = createResizeObserver(() => {
     if (this.engine && this.lite) {
       this.lite.resizeEngine(this.engine);
@@ -55,7 +56,11 @@ export class BabylonCanvas implements OnInit, OnDestroy {
     }
   });
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
+    void this.initialize();
+  }
+
+  private async initialize(): Promise<void> {
     if (!('gpu' in navigator)) {
       this.error.set('Babylon Lite requires a browser with WebGPU support.');
       return;
@@ -103,8 +108,11 @@ export class BabylonCanvas implements OnInit, OnDestroy {
       lite.addToScene(scene, ground);
 
       lite.onBeforeRender(scene, (deltaMs) => {
-        if (deltaMs > 0) {
+        const now = performance.now();
+
+        if (deltaMs > 0 && now - this.lastFpsAt >= 500) {
           this.fps.set(1000 / deltaMs);
+          this.lastFpsAt = now;
         }
       });
 
@@ -118,7 +126,10 @@ export class BabylonCanvas implements OnInit, OnDestroy {
 
       this.resizeObserver?.observe(canvas);
       await lite.startEngine(engine);
-      this.error.set(null);
+
+      if (this.error() !== null) {
+        this.error.set(null);
+      }
     } catch (error) {
       console.error('Babylon Lite initialization failed.', error);
       this.error.set('Babylon Lite could not be initialized.');
