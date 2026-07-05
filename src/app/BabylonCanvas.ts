@@ -20,6 +20,10 @@ const initialCamera = {
   target: { x: 0, y: 1, z: 0 },
 } as const;
 
+function createResizeObserver(callback: ResizeObserverCallback): ResizeObserver | null {
+  return typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(callback);
+}
+
 @Directive({
   selector: 'canvas[babylonCanvas]',
 })
@@ -38,7 +42,11 @@ export class BabylonCanvas implements OnInit, OnDestroy {
   private sphereMaterial: StandardMaterialProps | null = null;
   private detachCameraControls: (() => void) | null = null;
   private destroyed = false;
-  private resizeObserver: ResizeObserver | null = null;
+  private readonly resizeObserver = createResizeObserver(() => {
+    if (this.engine && this.lite) {
+      this.lite.resizeEngine(this.engine);
+    }
+  });
   private readonly applyColorEffect = effect(() => {
     const material = this.sphereMaterial;
 
@@ -81,13 +89,6 @@ export class BabylonCanvas implements OnInit, OnDestroy {
       this.scene = scene;
       this.camera = camera;
       this.sphereMaterial = sphereMaterial;
-      this.resizeObserver ??= typeof ResizeObserver === 'undefined'
-        ? null
-        : new ResizeObserver(() => {
-            if (this.engine && this.lite) {
-              this.lite.resizeEngine(this.engine);
-            }
-          });
 
       scene.camera = camera;
       this.detachCameraControls = lite.attachControl(camera, canvas, scene);
@@ -144,6 +145,8 @@ export class BabylonCanvas implements OnInit, OnDestroy {
     this.camera.alpha = initialCamera.alpha;
     this.camera.beta = initialCamera.beta;
     this.camera.radius = initialCamera.radius;
-    this.camera.target = { ...initialCamera.target };
+    this.camera.target.x = initialCamera.target.x;
+    this.camera.target.y = initialCamera.target.y;
+    this.camera.target.z = initialCamera.target.z;
   }
 }
