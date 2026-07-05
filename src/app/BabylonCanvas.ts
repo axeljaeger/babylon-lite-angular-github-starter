@@ -49,7 +49,7 @@ export class BabylonCanvas implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     if (!('gpu' in navigator)) {
-      this.error.set('Babylon Lite benötigt einen Browser mit WebGPU-Unterstützung.');
+      this.error.set('Babylon Lite requires a browser with WebGPU support.');
       return;
     }
 
@@ -118,8 +118,9 @@ export class BabylonCanvas implements OnInit, OnDestroy {
       this.resizeObserver?.observe(canvas);
       await lite.startEngine(engine);
       this.error.set(null);
-    } catch {
-      this.error.set('Babylon Lite konnte nicht initialisiert werden.');
+    } catch (error) {
+      console.error('Babylon Lite initialization failed.', error);
+      this.error.set('Babylon Lite could not be initialized.');
     }
   }
 
