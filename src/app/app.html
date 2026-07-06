@@ -1,2 +1,5 @@
 <canvas babylonCanvas [(color)]="color"></canvas>
-<details sidebar [fps]="fps()" (resetCamera)="babylon().resetCamera()" [(color)]="color" open></details>
+<details sidebar [fps]="babylon().fps()" (resetCamera)="babylon().resetCamera()" [(color)]="color" open></details>
+@if (babylon().error(); as error) {
+  <p class="webgpu-warning">{{ error }}</p>
+}
