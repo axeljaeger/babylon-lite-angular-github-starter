@@ -1,9 +1,25 @@
-import { Directive, ElementRef, effect, inject, model, signal, type OnDestroy, type OnInit } from '@angular/core';
-import type {
-  ArcRotateCamera,
-  EngineContext,
-  SceneContext,
-  StandardMaterialProps,
+import { Directive, effect, ElementRef, inject, model, type OnDestroy, type OnInit, signal } from '@angular/core';
+import {
+  type ArcRotateCamera,
+  type EngineContext,
+  type SceneContext,
+  type StandardMaterialProps,
+  resizeEngine,
+  disposeScene,
+  disposeEngine,
+  stopEngine,
+  registerScene,
+  startEngine,
+  createEngine,
+  createSceneContext,
+  createArcRotateCamera,
+  createHemisphericLight,
+  createSphere,
+  createGround,
+  createStandardMaterial,
+  addToScene,
+  onBeforeRender,
+  attachControl,
 } from '@babylonjs/lite';
 import type { PresetColor } from './sidebar/sidebar';
 
@@ -21,16 +37,11 @@ const initialCamera = {
 } as const;
 const fpsUpdateIntervalMs = 500;
 
-function createResizeObserver(callback: ResizeObserverCallback): ResizeObserver | null {
-  return typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(callback);
-}
-
 @Directive({
   selector: 'canvas[babylonCanvas]',
 })
 export class BabylonCanvas implements OnInit, OnDestroy {
   private readonly hostRef = inject<ElementRef<HTMLCanvasElement>>(ElementRef);
-  private lite: typeof import('@babylonjs/lite') | null = null;
 
   public readonly color = model.required<PresetColor>();
   public readonly fps = signal(0);
@@ -44,11 +55,13 @@ export class BabylonCanvas implements OnInit, OnDestroy {
   private detachCameraControls: (() => void) | null = null;
   private destroyed = false;
   private lastFpsAt = 0;
-  private readonly resizeObserver = createResizeObserver(() => {
-    if (this.engine && this.lite) {
-      this.lite.resizeEngine(this.engine);
+  
+  private readonly resizeObserver = new ResizeObserver(() => {
+    if (this.engine) {
+      resizeEngine(this.engine);
     }
   });
+  
   private readonly applyColorEffect = effect(() => {
     const material = this.sphereMaterial;
 
@@ -72,45 +85,43 @@ export class BabylonCanvas implements OnInit, OnDestroy {
     const canvas = this.hostRef.nativeElement;
 
     try {
-      const lite = await import('@babylonjs/lite');
-      const engine = await lite.createEngine(canvas);
+      const engine = await createEngine(canvas);
 
       if (this.destroyed) {
-        lite.disposeEngine(engine);
+        disposeEngine(engine);
         return;
       }
 
-      const scene = lite.createSceneContext(engine);
-      const camera = lite.createArcRotateCamera(
+      const scene = createSceneContext(engine);
+      const camera = createArcRotateCamera(
         initialCamera.alpha,
         initialCamera.beta,
         initialCamera.radius,
         initialCamera.target,
       );
-      const light = lite.createHemisphericLight([0, 1, 0]);
-      const sphere = lite.createSphere(engine, { diameter: 2, segments: 32 });
-      const ground = lite.createGround(engine, { width: 6, height: 6 });
-      const sphereMaterial = lite.createStandardMaterial();
+      const light = createHemisphericLight([0, 1, 0]);
+      const sphere = createSphere(engine, { diameter: 2, segments: 32 });
+      const ground = createGround(engine, { width: 6, height: 6 });
+      const sphereMaterial = createStandardMaterial();
 
-      this.lite = lite;
       this.engine = engine;
       this.scene = scene;
       this.camera = camera;
       this.sphereMaterial = sphereMaterial;
 
       scene.camera = camera;
-      this.detachCameraControls = lite.attachControl(camera, canvas, scene);
+      this.detachCameraControls = attachControl(camera, canvas, scene);
 
       light.intensity = 0.7;
       sphere.position.y = 1;
       sphere.material = sphereMaterial;
       sphereMaterial.diffuseColor = colorLookup[this.color()];
 
-      lite.addToScene(scene, light);
-      lite.addToScene(scene, sphere);
-      lite.addToScene(scene, ground);
+      addToScene(scene, light);
+      addToScene(scene, sphere);
+      addToScene(scene, ground);
 
-      lite.onBeforeRender(scene, (deltaMs) => {
+      onBeforeRender(scene, (deltaMs) => {
         const now = performance.now();
 
         if (deltaMs > 0 && now - this.lastFpsAt >= fpsUpdateIntervalMs) {
@@ -119,16 +130,16 @@ export class BabylonCanvas implements OnInit, OnDestroy {
         }
       });
 
-      await lite.registerScene(scene);
+      await registerScene(scene);
 
       if (this.destroyed) {
-        lite.disposeScene(scene);
-        lite.disposeEngine(engine);
+        disposeScene(scene);
+        disposeEngine(engine);
         return;
       }
 
       this.resizeObserver?.observe(canvas);
-      await lite.startEngine(engine);
+      await startEngine(engine);
 
       if (this.error() !== null) {
         this.error.set(null);
@@ -144,10 +155,10 @@ export class BabylonCanvas implements OnInit, OnDestroy {
     this.detachCameraControls?.();
     this.resizeObserver?.disconnect();
 
-    if (this.engine && this.scene && this.lite) {
-      this.lite.stopEngine(this.engine);
-      this.lite.disposeScene(this.scene);
-      this.lite.disposeEngine(this.engine);
+    if (this.engine && this.scene) {
+      stopEngine(this.engine);
+      disposeScene(this.scene);
+      disposeEngine(this.engine);
     }
   }
 
