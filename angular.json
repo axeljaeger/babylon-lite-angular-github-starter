@@ -30,6 +30,7 @@
           },
           "configurations": {
             "production": {
+              "baseHref": "/babylon-lite-angular-github-starter/",
               "budgets": [
                 {
                   "type": "initial",
