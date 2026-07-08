@@ -1,6 +1,11 @@
 {
   "name": "BabylonJS Angular Starter",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:24",
+    "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "24.15.0"
+    }
+  },
   "customizations": {
     "codespaces": {
       "openFiles": ["README.md", "src/app/app.ts"]
