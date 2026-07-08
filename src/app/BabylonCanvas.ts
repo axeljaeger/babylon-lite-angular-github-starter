@@ -20,6 +20,9 @@ import {
   addToScene,
   onBeforeRender,
   attachControl,
+  type Mesh,
+  removeFromScene,
+  markMaterialUboDirty
 } from '@babylonjs/lite';
 import type { PresetColor } from './sidebar/sidebar';
 
@@ -53,8 +56,9 @@ export class BabylonCanvas implements OnInit, OnDestroy {
 
   private sphereMaterial: StandardMaterialProps | null = null;
   private detachCameraControls: (() => void) | null = null;
-  private destroyed = false;
   private lastFpsAt = 0;
+
+  private meshes = [] as Mesh[]
   
   private readonly resizeObserver = new ResizeObserver(() => {
     if (this.engine) {
@@ -64,14 +68,15 @@ export class BabylonCanvas implements OnInit, OnDestroy {
   
   private readonly applyColorEffect = effect(() => {
     const material = this.sphereMaterial;
-
+    const colorKey = this.color();
     if (material) {
-      material.diffuseColor = colorLookup[this.color()];
+      material.diffuseColor = colorLookup[colorKey];
+      markMaterialUboDirty(material);
     }
   });
 
-  ngOnInit(): void {
-    void this.initialize();
+  async ngOnInit(): Promise<void> {
+    await this.initialize();
   }
 
   private async initialize(): Promise<void> {
@@ -110,7 +115,9 @@ export class BabylonCanvas implements OnInit, OnDestroy {
       this.scene.camera = this.camera;
       this.detachCameraControls = attachControl(this.camera, canvas, this.scene);
 
-      for (const object of [light, sphere, ground]) {
+      this.meshes = [sphere, ground];
+
+      for (const object of [...this.meshes, light]) {
         addToScene(this.scene, object);
       }
 
@@ -125,12 +132,6 @@ export class BabylonCanvas implements OnInit, OnDestroy {
 
       await registerScene(this.scene);
 
-      if (this.destroyed) {
-        disposeScene(this.scene);
-        disposeEngine(this.engine);
-        return;
-      }
-
       this.resizeObserver?.observe(canvas);
       await startEngine(this.engine);
 
@@ -144,8 +145,10 @@ export class BabylonCanvas implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // cleanup?
-    this.destroyed = true;
+      for (const object of this.meshes) {
+        removeFromScene(this.scene!, object);
+      }
+  
     this.detachCameraControls?.();
     this.resizeObserver?.disconnect();
 
@@ -160,12 +163,6 @@ export class BabylonCanvas implements OnInit, OnDestroy {
     if (!this.camera) {
       return;
     }
-
-    this.camera.alpha = initialCamera.alpha;
-    this.camera.beta = initialCamera.beta;
-    this.camera.radius = initialCamera.radius;
-    this.camera.target.x = initialCamera.target.x;
-    this.camera.target.y = initialCamera.target.y;
-    this.camera.target.z = initialCamera.target.z;
+    Object.assign(this.camera, initialCamera)
   }
 }
